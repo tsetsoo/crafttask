@@ -1,9 +1,9 @@
 package crafttask
 
-const root = uint64(0)
+const root = id(0)
 
 type block struct {
-	id        uint64
+	id        id
 	content   string
 	subblocks *orderedMapOfBlocks
 }

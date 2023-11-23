@@ -1,24 +1,24 @@
 package crafttask
 
 type orderedMapOfBlocks struct {
-	keys   []uint64
-	values map[uint64]block
+	keys   []id
+	values map[id]block
 }
 
 func NewOrderedMapOfBlocks() *orderedMapOfBlocks {
 	o := orderedMapOfBlocks{
-		keys:   make([]uint64, 0),
-		values: make(map[uint64]block),
+		keys:   make([]id, 0),
+		values: make(map[id]block),
 	}
 	return &o
 }
 
-func (o *orderedMapOfBlocks) Get(key uint64) (block, bool) {
+func (o *orderedMapOfBlocks) Get(key id) (block, bool) {
 	val, exists := o.values[key]
 	return val, exists
 }
 
-func (o *orderedMapOfBlocks) GetAndIndex(key uint64) (block, int, bool) {
+func (o *orderedMapOfBlocks) GetAndIndex(key id) (block, int, bool) {
 	val, exists := o.values[key]
 	if !exists {
 		return block{}, 0, false
@@ -32,7 +32,7 @@ func (o *orderedMapOfBlocks) GetAndIndex(key uint64) (block, int, bool) {
 	return val, index, true
 }
 
-func (o *orderedMapOfBlocks) Set(key uint64, value block) {
+func (o *orderedMapOfBlocks) Set(key id, value block) {
 	_, exists := o.values[key]
 	if !exists {
 		o.keys = append(o.keys, key)
@@ -40,7 +40,7 @@ func (o *orderedMapOfBlocks) Set(key uint64, value block) {
 	o.values[key] = value
 }
 
-func (o *orderedMapOfBlocks) Insert(key uint64, index int, value block) {
+func (o *orderedMapOfBlocks) Insert(key id, index int, value block) {
 	_, exists := o.values[key]
 	if !exists {
 		o.keys = insert(o.keys, index, key)
@@ -48,7 +48,7 @@ func (o *orderedMapOfBlocks) Insert(key uint64, index int, value block) {
 	o.values[key] = value
 }
 
-func insert(a []uint64, index int, value uint64) []uint64 {
+func insert(a []id, index int, value id) []id {
 	if index >= len(a) { // to handle sometimes incosistent state if we try to insert at an invalid index, we just append instead
 		return append(a, value)
 	}
@@ -57,7 +57,7 @@ func insert(a []uint64, index int, value uint64) []uint64 {
 	return a
 }
 
-func (o *orderedMapOfBlocks) Delete(key uint64) {
+func (o *orderedMapOfBlocks) Delete(key id) {
 	// check key is in use
 	_, ok := o.values[key]
 	if !ok {
@@ -74,11 +74,11 @@ func (o *orderedMapOfBlocks) Delete(key uint64) {
 	delete(o.values, key)
 }
 
-func (o *orderedMapOfBlocks) Keys() []uint64 {
+func (o *orderedMapOfBlocks) Keys() []id {
 	return o.keys
 }
 
-func (o *orderedMapOfBlocks) Values() map[uint64]block {
+func (o *orderedMapOfBlocks) Values() map[id]block {
 	return o.values
 }
 

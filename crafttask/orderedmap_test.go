@@ -1,7 +1,6 @@
 package crafttask
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -26,9 +25,7 @@ func TestInsertAndGetAndIndex(t *testing.T) {
 	o.Insert(2, 1, block2)
 
 	keys := o.Keys()
-	if !reflect.DeepEqual(keys, []uint64{1, 2}) {
-		t.Errorf("Insert: Expected keys %v, got %v", []uint64{1, 2}, keys)
-	}
+	assert.Equal(t, []id{1, 2}, keys)
 
 	val, index, exists := o.GetAndIndex(2)
 	assert.True(t, exists, "Key should exist")

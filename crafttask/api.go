@@ -5,43 +5,47 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/gorilla/mux"
 )
 
-type Server struct {
-	store *InMemoryStore
+type API struct {
+	store Store
 }
 
-func NewServer(store *InMemoryStore) Server {
-	return Server{
+func NewAPI(store Store) API {
+	return API{
 		store,
 	}
 }
 
 // InsertBlocks inserts a list of new blocks to the document
-func (s Server) InsertBlocks(w http.ResponseWriter, r *http.Request) {
-	var insertPayload insertPayload
-	err := json.NewDecoder(r.Body).Decode(&insertPayload)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+func (s API) InsertBlocks(w http.ResponseWriter, r *http.Request) {
+	var insertPayload []insertOperation
+	decodeErr := json.NewDecoder(r.Body).Decode(&insertPayload)
+	if decodeErr != nil {
+		http.Error(w, decodeErr.Error(), http.StatusBadRequest)
 		return
 	}
 	// validate payload
-	s.store.insert(insertPayload) // return value
+	blocks, insertErr := s.store.InsertBlocks(insertPayload)
+	if insertErr != nil {
+		http.Error(w, insertErr.Error(), http.StatusInternalServerError)
+		return
+	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(blocksToResponse(blocks))
 }
 
-// DeleteBlocks deletes a list of existing blocks from the document
-func (s Server) DeleteBlocks(w http.ResponseWriter, r *http.Request) {
-	idsRaw := mux.Vars(r)["blockIds"]
+func (s API) DeleteBlocks(w http.ResponseWriter, r *http.Request) {
+	idsRaw := r.URL.Query().Get("blockIds")
 	idsSplit := strings.Split(idsRaw, ",")
-	ids := make([]uint64, len(idsSplit))
+	ids := make([]id, len(idsSplit))
 	for _, idRaw := range idsSplit {
-		id, err := strconv.ParseUint(idRaw, 10, 64)
+		id, err := idFromString(idRaw)
 		if err != nil {
 			http.Error(w, "block id parameter not an id", http.StatusBadRequest)
 			return
@@ -49,43 +53,40 @@ func (s Server) DeleteBlocks(w http.ResponseWriter, r *http.Request) {
 		ids = append(ids, id)
 	}
 	// validate payload
-	s.store.delete(ids)
+	s.store.DeleteBlocks(ids)
 
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// FetchBlocksByID fetches a list of existing blocks by their ID from the document
-func (s Server) FetchBlocksByID(w http.ResponseWriter, r *http.Request) {
-	idsRaw := mux.Vars(r)["blockIds"]
+func (s API) FetchBlocksByID(w http.ResponseWriter, r *http.Request) {
+	idsRaw := r.URL.Query().Get("blockIds")
 	idsSplit := strings.Split(idsRaw, ",")
-	ids := make([]uint64, len(idsSplit))
+	ids := make([]id, len(idsSplit))
 	for _, idRaw := range idsSplit {
-		id, err := strconv.ParseUint(idRaw, 10, 64)
+		id, err := idFromString(idRaw)
 		if err != nil {
 			http.Error(w, "block id parameter not an id", http.StatusBadRequest)
 			return
 		}
 		ids = append(ids, id)
 	}
-	blocks := s.store.fetch(ids)
+	blocks := s.store.FetchBlocks(ids)
 	// Respond with the fetched blocks
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(blocksToResponse(blocks))
 	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(blocksToResponse(blocks))
 }
 
-// DuplicateBlock duplicates an existing block with all of its subblocks
-func (s Server) DuplicateBlock(w http.ResponseWriter, r *http.Request) {
-	params := mux.Vars(r)
-	idRaw := params["id"]
-	id, err := strconv.ParseUint(idRaw, 10, 64)
+func (s API) DuplicateBlock(w http.ResponseWriter, r *http.Request) {
+	idRaw := mux.Vars(r)["id"]
+	id, err := idFromString(idRaw)
 	if err != nil {
 		http.Error(w, "block id paramter", http.StatusBadRequest)
 		return
 	}
 	// validate payload
 
-	block, err := s.store.duplicate(id)
+	block, err := s.store.DuplicateBlock(id)
 	if err != nil {
 		if errors.Is(err, errBlockDoesNotExist) {
 			http.Error(w, "block to duplicate does not exist", http.StatusNotFound)
@@ -96,14 +97,11 @@ func (s Server) DuplicateBlock(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(blockToResponse(block))
-	w.WriteHeader(http.StatusOK)
 }
 
-// MoveBlock moves an existing block to another position in the document
-func (s Server) MoveBlock(w http.ResponseWriter, r *http.Request) {
-	params := mux.Vars(r)
-	idRaw := params["id"]
-	id, parseErr := strconv.ParseUint(idRaw, 10, 64)
+func (s API) MoveBlock(w http.ResponseWriter, r *http.Request) {
+	idRaw := mux.Vars(r)["id"]
+	id, parseErr := idFromString(idRaw)
 	if parseErr != nil {
 		http.Error(w, "block id paramter", http.StatusBadRequest)
 		return
@@ -115,8 +113,9 @@ func (s Server) MoveBlock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// validate payload
+	// also validate blockToMove != newParentId
 
-	err := s.store.move(id, movePayload)
+	err := s.store.MoveBlock(id, movePayload)
 	if err != nil {
 		if errors.Is(err, errBlockDoesNotExist) {
 			http.Error(w, "block to move does not exist", http.StatusNotFound)
@@ -124,23 +123,22 @@ func (s Server) MoveBlock(w http.ResponseWriter, r *http.Request) {
 		} else if errors.Is(err, errParentBlockDoesNotExist) {
 			http.Error(w, "parent block to move to is invalid or does not exist", http.StatusBadRequest)
 			return
+		} else if errors.Is(err, errBlockMovedToItsChild) {
+			http.Error(w, "block to move is a parent of the block to move to", http.StatusBadRequest)
+			return
 		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ExportDocument exports the full document to a single string
-func (s Server) ExportDocument(w http.ResponseWriter, r *http.Request) {
-	// Implement logic to export the full document to a single string
-	// ...
-
-	// Respond with the exported document
+func (s API) ExportDocument(w http.ResponseWriter, r *http.Request) {
+	content := s.store.Export()
 	w.Header().Set("Content-Type", "text/plain")
-	fmt.Fprint(w, "Exported document content")
+	fmt.Fprint(w, content)
 }
 
 func blocksToResponse(blocks []block) []blockResponse {
-	toReturn := make([]blockResponse, len(blocks))
+	toReturn := make([]blockResponse, 0, len(blocks))
 	for _, block := range blocks {
 		reponse := blockToResponse(block)
 		toReturn = append(toReturn, reponse)

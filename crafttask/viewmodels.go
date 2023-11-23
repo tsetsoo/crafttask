@@ -1,27 +1,23 @@
 package crafttask
 
 type insertOperation struct {
-	ParentBlockId uint64
+	ParentBlockId id
 	Block         blockRequest
 	Index         int
 }
 
-type insertPayload struct {
-	InsertOperations []insertOperation
-}
-
 type movePayload struct {
-	NewParentId uint64
+	NewParentId id
 	Index       int
 }
 
 type blockResponse struct {
-	Id        uint64
+	Id        id
 	Content   string
 	Subblocks []blockResponse
 }
 
 type blockRequest struct {
 	Content   string
-	Subblocks []blockRequest //TODO not implemented
+	Subblocks []blockRequest //not implemented
 }

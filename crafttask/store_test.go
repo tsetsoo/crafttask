@@ -7,139 +7,245 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestInMemoryStoreInsert(t *testing.T) {
+func TestInMemoryStore_Insert(t *testing.T) {
 	store := NewInMemoryStore()
 
-	block1 := blockRequest{Content: "Block 1"}
-	block2 := blockRequest{Content: "Block 2"}
+	blockRequest1 := blockRequest{Content: "Block 1"}
+	blockRequest2 := blockRequest{Content: "Block 2"}
 
-	payload := insertPayload{
-		InsertOperations: []insertOperation{
-			{ParentBlockId: root, Index: 0, Block: block1},
-			{ParentBlockId: root, Index: 1, Block: block2},
-		},
+	payload := []insertOperation{
+		{ParentBlockId: root, Index: 0, Block: blockRequest1},
+		{ParentBlockId: root, Index: 1, Block: blockRequest2},
 	}
 
-	err := store.insert(payload)
-	assert.NoError(t, err)
+	_, err := store.InsertBlocks(payload)
+	require.NoError(t, err)
 
-	// Retrieve blocks and check if they exist in the store
 	block1Retrieved, _, _, err := store.findBlockById(1)
-	assert.NoError(t, err)
-	assert.Equal(t, block1.Content, block1Retrieved.content)
+	require.NoError(t, err)
+	assert.Equal(t, blockRequest1.Content, block1Retrieved.content)
 
 	block2Retrieved, _, _, err := store.findBlockById(2)
-	assert.NoError(t, err)
-	assert.Equal(t, block2.Content, block2Retrieved.content)
+	require.NoError(t, err)
+	assert.Equal(t, blockRequest2.Content, block2Retrieved.content)
 }
 
-func TestInMemoryStoreDelete(t *testing.T) {
+func TestInMemoryStore_Delete(t *testing.T) {
 	store := NewInMemoryStore()
 
-	block1 := blockRequest{Content: "Block 1"}
-	block2 := blockRequest{Content: "Block 2"}
+	blockRequest1 := blockRequest{Content: "Block 1"}
+	blockRequest2 := blockRequest{Content: "Block 2"}
 
-	payload := insertPayload{
-		InsertOperations: []insertOperation{
-			{ParentBlockId: root, Index: 0, Block: block1},
-			{ParentBlockId: root, Index: 1, Block: block2},
-		},
+	payload := []insertOperation{
+		{ParentBlockId: root, Index: 0, Block: blockRequest1},
+		{ParentBlockId: root, Index: 1, Block: blockRequest2},
 	}
 
-	err := store.insert(payload)
-	assert.NoError(t, err)
+	_, err := store.InsertBlocks(payload)
+	require.NoError(t, err)
 
-	// Delete block with id 1
-	store.delete([]uint64{1})
+	store.DeleteBlocks([]id{1})
 
-	// Verify that block1 is deleted
 	_, _, _, err = store.findBlockById(1)
-	assert.Error(t, err)
 	assert.Equal(t, errBlockDoesNotExist, err)
 }
 
-func TestInMemoryStoreDuplicate(t *testing.T) {
+func TestInMemoryStore_Duplicate(t *testing.T) {
 	store := NewInMemoryStore()
 
-	block1 := blockRequest{Content: "Block 1"}
-	payload := insertPayload{
-		InsertOperations: []insertOperation{
-			{ParentBlockId: root, Index: 0, Block: block1},
-		},
+	blockToDuplicateIndex := 0
+	blockRequest1 := blockRequest{Content: "Block 1"}
+	payload := []insertOperation{
+		{ParentBlockId: root, Index: blockToDuplicateIndex, Block: blockRequest1},
 	}
 
-	err := store.insert(payload)
-	assert.NoError(t, err)
+	blocks, err := store.InsertBlocks(payload)
+	require.NoError(t, err)
 
 	childBlock := blockRequest{Content: "Child Block 1"}
-	payload = insertPayload{
-		InsertOperations: []insertOperation{
-			{ParentBlockId: 1, Index: 0, Block: childBlock},
-		},
+	payload = []insertOperation{
+		{ParentBlockId: blocks[0].id, Index: 0, Block: childBlock},
 	}
 
-	err = store.insert(payload)
-	assert.NoError(t, err)
+	_, err = store.InsertBlocks(payload)
+	require.NoError(t, err)
 
-	// Duplicate block with id 1
-	duplicatedBlock, err := store.duplicate(1)
-	assert.NoError(t, err)
+	duplicatedBlock, err := store.DuplicateBlock(1)
+	require.NoError(t, err)
 
-	// Verify that the block is duplicated
-	assert.NoError(t, err)
-	assert.Equal(t, block1.Content, duplicatedBlock.content)
+	require.NoError(t, err)
+	assert.Equal(t, blockRequest1.Content, duplicatedBlock.content)
 	require.Len(t, duplicatedBlock.subblocks.values, 1)
-	assert.Equal(t, duplicatedBlock.subblocks.OrderedValues()[0].content, childBlock.Content)
+	assert.Equal(t, childBlock.Content, duplicatedBlock.subblocks.OrderedValues()[0].content)
+
+	require.Len(t, store.document.blocks.keys, 2)
+	assert.Equal(t, id(1), store.document.blocks.keys[blockToDuplicateIndex])
+	assert.Equal(t, duplicatedBlock.id, store.document.blocks.keys[blockToDuplicateIndex+1])
 }
 
-// func TestInMemoryStoreMove(t *testing.T) {
-// 	store := NewInMemoryStore()
-
-// 	block1 := blockRequest{ Content: "Block 1"}
-// 	block2 := blockRequest{ Content: "Block 2"}
-
-// 	payload := insertPayload{
-// 		InsertOperations: []insertOperation{
-// 			{ParentBlockId: root, Index: 0, Block: block1},
-// 			{ParentBlockId: root, Index: 1, Block: block2},
-// 		},
-// 	}
-
-// 	err := store.insert(payload)
-// 	assert.NoError(t, err)
-
-// 	// Move block with id 1 to a new parent
-// 	movePayload := movePayload{NewParentId: 2, Index: 0}
-// 	err = store.move(1, movePayload)
-// 	assert.NoError(t, err)
-
-// 	// Verify that the block is moved
-// 	_, _, newParentMap, err := store.findBlockById(1)
-// 	assert.NoError(t, err)
-// 	assert.Equal(t, block2, newParentMap.Get(1))
-// }
-
-func TestInMemoryStoreFetch(t *testing.T) {
+func TestInMemoryStore_Move(t *testing.T) {
 	store := NewInMemoryStore()
 
-	block1 := blockRequest{Content: "Block 1"}
-	block2 := blockRequest{Content: "Block 2"}
+	blockRequest1 := blockRequest{Content: "Block 1"}
+	blockRequest2 := blockRequest{Content: "Block 2"}
 
-	payload := insertPayload{
-		InsertOperations: []insertOperation{
-			{ParentBlockId: root, Index: 0, Block: block1},
-			{ParentBlockId: root, Index: 1, Block: block2},
-		},
+	payload := []insertOperation{
+		{ParentBlockId: root, Index: 0, Block: blockRequest1},
+		{ParentBlockId: root, Index: 1, Block: blockRequest2},
 	}
 
-	err := store.insert(payload)
-	assert.NoError(t, err)
+	blocks, err := store.InsertBlocks(payload)
+	require.NoError(t, err)
 
-	// Fetch blocks with ids 1 and 2
-	fetchedBlocks := store.fetch([]uint64{1, 2})
+	childBlockRequest1 := blockRequest{Content: "Child Block 1"}
+	childBlockRequest2 := blockRequest{Content: "Child Block 2"}
 
-	// Verify that the correct blocks are fetched
-	assert.Equal(t, 2, len(fetchedBlocks))
-	assert.Contains(t, fetchedBlocks, block1)
-	assert.Contains(t, fetchedBlocks, block2)
+	payload = []insertOperation{
+		{ParentBlockId: blocks[0].id, Index: 0, Block: childBlockRequest1},
+		{ParentBlockId: blocks[1].id, Index: 1, Block: childBlockRequest2},
+	}
+
+	childBlocks, err := store.InsertBlocks(payload)
+	require.NoError(t, err)
+
+	grandChildBlockRequest1 := blockRequest{Content: "Grand Child Block 1"}
+	grandChildBlockRequest2 := blockRequest{Content: "Grand Child Block 2"}
+
+	payload = []insertOperation{
+		{ParentBlockId: childBlocks[0].id, Index: 0, Block: grandChildBlockRequest1},
+		{ParentBlockId: childBlocks[1].id, Index: 1, Block: grandChildBlockRequest2},
+	}
+
+	grandChildrenBlocks, err := store.InsertBlocks(payload)
+	require.NoError(t, err)
+
+	movedBlockId := childBlocks[0].id
+	newParentBlockId := childBlocks[1].id
+	movePayload := movePayload{NewParentId: newParentBlockId, Index: 0}
+	err = store.MoveBlock(movedBlockId, movePayload)
+	require.NoError(t, err)
+
+	assert.Equal(t, newParentBlockId, store.parentsCache[movedBlockId])
+	newParentBlock, _, _, err := store.findBlockById(newParentBlockId)
+	require.NoError(t, err)
+	require.Len(t, newParentBlock.subblocks.values, 2)
+	assert.Equal(t, newParentBlock.subblocks.keys[0], movedBlockId)
+	assert.Equal(t, newParentBlock.subblocks.keys[1], grandChildrenBlocks[1].id)
+
+	require.Len(t, newParentBlock.subblocks.OrderedValues()[0].subblocks.OrderedValues(), 1)
+	assert.Equal(t, newParentBlock.subblocks.OrderedValues()[0].subblocks.OrderedValues()[0], grandChildrenBlocks[0])
+}
+
+func TestInMemoryStore_MoveParentToChild_Err(t *testing.T) {
+	store := NewInMemoryStore()
+
+	blockRequest1 := blockRequest{Content: "Block 1"}
+	blockRequest2 := blockRequest{Content: "Block 2"}
+
+	payload := []insertOperation{
+		{ParentBlockId: root, Index: 0, Block: blockRequest1},
+		{ParentBlockId: root, Index: 1, Block: blockRequest2},
+	}
+
+	blocks, err := store.InsertBlocks(payload)
+	require.NoError(t, err)
+
+	childBlockRequest1 := blockRequest{Content: "Child Block 1"}
+	childBlockRequest2 := blockRequest{Content: "Child Block 2"}
+
+	payload = []insertOperation{
+		{ParentBlockId: blocks[0].id, Index: 0, Block: childBlockRequest1},
+		{ParentBlockId: blocks[1].id, Index: 1, Block: childBlockRequest2},
+	}
+
+	childBlocks, err := store.InsertBlocks(payload)
+	require.NoError(t, err)
+
+	grandChildBlockRequest1 := blockRequest{Content: "Grand Child Block 1"}
+	grandChildBlockRequest2 := blockRequest{Content: "Grand Child Block 2"}
+
+	payload = []insertOperation{
+		{ParentBlockId: childBlocks[0].id, Index: 0, Block: grandChildBlockRequest1},
+		{ParentBlockId: childBlocks[1].id, Index: 1, Block: grandChildBlockRequest2},
+	}
+
+	grandChildrenBlocks, err := store.InsertBlocks(payload)
+	require.NoError(t, err)
+
+	movedBlockId := childBlocks[0].id
+	newParentBlockId := grandChildrenBlocks[0].id
+	movePayload := movePayload{NewParentId: newParentBlockId, Index: 0}
+	err = store.MoveBlock(movedBlockId, movePayload)
+	assert.Equal(t, errBlockMovedToItsChild, err)
+}
+
+func TestInMemoryStore_Fetch(t *testing.T) {
+	store := NewInMemoryStore()
+
+	blockRequest1 := blockRequest{Content: "Block 1"}
+	blockRequest2 := blockRequest{Content: "Block 2"}
+	blockRequest3 := blockRequest{Content: "Block 3"}
+
+	payload := []insertOperation{
+		{ParentBlockId: root, Index: 0, Block: blockRequest1},
+		{ParentBlockId: root, Index: 1, Block: blockRequest2},
+		{ParentBlockId: root, Index: 2, Block: blockRequest3},
+	}
+
+	_, err := store.InsertBlocks(payload)
+	require.NoError(t, err)
+
+	fetchedBlocks := store.FetchBlocks([]id{1, 2})
+
+	require.Len(t, fetchedBlocks, 2)
+	assert.Equal(t, blockRequest1.Content, fetchedBlocks[0].content)
+	assert.Equal(t, blockRequest2.Content, fetchedBlocks[1].content)
+}
+
+func TestInMemoryStore_Export(t *testing.T) {
+	store := NewInMemoryStore()
+
+	blockRequest1 := blockRequest{Content: "Block 1"}
+	blockRequest2 := blockRequest{Content: "Block 2"}
+
+	payload := []insertOperation{
+		{ParentBlockId: root, Index: 0, Block: blockRequest1},
+		{ParentBlockId: root, Index: 1, Block: blockRequest2},
+	}
+
+	blocks, err := store.InsertBlocks(payload)
+	require.NoError(t, err)
+
+	childBlockRequest1 := blockRequest{Content: "Child Block 1"}
+	childBlockRequest2 := blockRequest{Content: "Child Block 2"}
+
+	payload = []insertOperation{
+		{ParentBlockId: blocks[0].id, Index: 0, Block: childBlockRequest1},
+		{ParentBlockId: blocks[1].id, Index: 1, Block: childBlockRequest2},
+	}
+
+	childBlocks, err := store.InsertBlocks(payload)
+	require.NoError(t, err)
+
+	grandChildBlockRequest1 := blockRequest{Content: "Grand Child Block 1"}
+	grandChildBlockRequest2 := blockRequest{Content: "Grand Child Block 2"}
+
+	payload = []insertOperation{
+		{ParentBlockId: childBlocks[0].id, Index: 0, Block: grandChildBlockRequest1},
+		{ParentBlockId: childBlocks[1].id, Index: 1, Block: grandChildBlockRequest2},
+	}
+
+	_, err = store.InsertBlocks(payload)
+	require.NoError(t, err)
+
+	result := store.Export()
+	assert.Equal(t,
+		`Block 1
+  Child Block 1
+    Grand Child Block 1
+Block 2
+  Child Block 2
+    Grand Child Block 2
+`,
+		result)
 }
