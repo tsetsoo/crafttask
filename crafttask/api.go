@@ -71,7 +71,7 @@ func (s API) FetchBlocksByID(w http.ResponseWriter, r *http.Request) {
 		ids = append(ids, id)
 	}
 	blocks := s.store.FetchBlocks(ids)
-	// Respond with the fetched blocks
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(blocksToResponse(blocks))

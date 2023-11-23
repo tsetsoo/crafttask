@@ -157,19 +157,19 @@ func (st *InMemoryStore) recursiveSetNewIds(blockToSetIdsTo *block, parentId id)
 }
 
 func (st *InMemoryStore) MoveBlock(blockId id, movePayload movePayload) error {
-	err := st.blockMovedToItsChild(blockId, movePayload.NewParentId)
-	if err != nil {
-		return err
+	consistencyCheckErr := st.blockMovedToItsChild(blockId, movePayload.NewParentId)
+	if consistencyCheckErr != nil {
+		return consistencyCheckErr
 	}
-	blockToMove, _, oldMap, err := st.findBlockById(blockId)
-	if err != nil {
-		return err
+	blockToMove, _, oldMap, findErr := st.findBlockById(blockId)
+	if findErr != nil {
+		return findErr
 	}
 
 	oldMap.Delete(blockId)
 	st.parentsCache[blockId] = movePayload.NewParentId
-	newMap, err := st.findMapByParent(movePayload.NewParentId)
-	if err != nil {
+	newMap, findMapErr := st.findMapByParent(movePayload.NewParentId)
+	if findMapErr != nil {
 		//log
 		return errParentBlockDoesNotExist
 	}
@@ -178,7 +178,6 @@ func (st *InMemoryStore) MoveBlock(blockId id, movePayload movePayload) error {
 	return nil
 }
 
-// this is the only piece of business logic that can be extracted to a service struct/class/layer; the rest is persistance logic
 func (st *InMemoryStore) blockMovedToItsChild(blockId, newParentId id) error {
 	for newParentId != root {
 		var ok bool

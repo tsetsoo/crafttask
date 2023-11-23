@@ -58,19 +58,16 @@ func insert(a []id, index int, value id) []id {
 }
 
 func (o *orderedMapOfBlocks) Delete(key id) {
-	// check key is in use
 	_, ok := o.values[key]
 	if !ok {
 		return
 	}
-	// remove from keys
 	for i, k := range o.keys {
 		if k == key {
 			o.keys = append(o.keys[:i], o.keys[i+1:]...)
 			break
 		}
 	}
-	// remove from values
 	delete(o.values, key)
 }
 

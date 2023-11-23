@@ -13,7 +13,7 @@ func TestGet(t *testing.T) {
 
 	val, exists := o.Get(1)
 	assert.True(t, exists, "Key should exist")
-	assert.Equal(t, block1, val, "Values should be equal")
+	assert.Equal(t, block1, val)
 }
 
 func TestInsertAndGetAndIndex(t *testing.T) {
@@ -22,15 +22,14 @@ func TestInsertAndGetAndIndex(t *testing.T) {
 	block2 := block{content: "Block2"}
 
 	o.Set(1, block1)
-	o.Insert(2, 1, block2)
+	o.Insert(2, 0, block2)
 
-	keys := o.Keys()
-	assert.Equal(t, []id{1, 2}, keys)
+	assert.Equal(t, []id{2, 1}, o.Keys())
 
 	val, index, exists := o.GetAndIndex(2)
-	assert.True(t, exists, "Key should exist")
-	assert.Equal(t, block2, val, "Values should be equal")
-	assert.Equal(t, 1, index, "Index should be 1")
+	assert.True(t, exists)
+	assert.Equal(t, block2, val)
+	assert.Equal(t, 0, index)
 }
 
 func TestDelete(t *testing.T) {
@@ -41,7 +40,7 @@ func TestDelete(t *testing.T) {
 	o.Delete(1)
 
 	_, exists := o.Get(1)
-	assert.False(t, exists, "Key should not exist after deletion")
+	assert.False(t, exists)
 }
 
 func TestOrderedValues(t *testing.T) {
@@ -54,5 +53,5 @@ func TestOrderedValues(t *testing.T) {
 
 	expectedOrderedValues := []block{block1, block2}
 
-	assert.Equal(t, expectedOrderedValues, o.OrderedValues(), "OrderedValues should be equal")
+	assert.Equal(t, expectedOrderedValues, o.OrderedValues())
 }
